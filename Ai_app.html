@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHADOW PAC — Stealth Edition</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Press Start 2P', monospace;
+    color: #fff;
+    overflow: hidden;
+  }
+  #title {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 1.8rem;
+    letter-spacing: 0.3em;
+    color: #ffe600;
+    text-shadow: 0 0 20px #ffe60088, 0 0 40px #ffe60044;
+    margin-bottom: 6px;
+  }
+  #subtitle {
+    font-size: 0.45rem;
+    letter-spacing: 0.5em;
+    color: #ff6666;
+    margin-bottom: 12px;
+    text-shadow: 0 0 10px #ff6666aa;
+  }
+  #hud {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 10px;
+    font-size: 0.5rem;
+    letter-spacing: 0.1em;
+  }
+  .hud-item span { color: #ffe600; }
+  #gameContainer {
+    position: relative;
+    border: 2px solid #1a1aff55;
+    box-shadow: 0 0 40px #1a1aff22;
+  }
+  canvas { display: block; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.92);
+    z-index: 10;
+  }
+  #overlay h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.6rem;
+    color: #ffe600;
+    text-shadow: 0 0 20px #ffe600;
+    margin-bottom: 14px;
+  }
+  #overlay .info {
+    font-size: 0.5rem;
+    color: #aaa;
+    margin-bottom: 6px;
+    text-align: center;
+    line-height: 2;
+  }
+  #overlay .info span { color: #ffe600; }
+  #overlay button {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.55rem;
+    padding: 12px 28px;
+    background: transparent;
+    border: 2px solid #ffe600;
+    color: #ffe600;
+    cursor: pointer;
+    letter-spacing: 0.2em;
+    margin-top: 16px;
+    transition: all 0.15s;
+    box-shadow: 0 0 20px #ffe60033;
+  }
+  #overlay button:hover {
+    background: #ffe600;
+    color: #000;
+    box-shadow: 0 0 30px #ffe600aa;
+  }
+  #controls {
+    margin-top: 10px;
+    font-size: 0.38rem;
+    color: #333;
+    letter-spacing: 0.1em;
+  }
+</style>
+</head>
+<body>
+
+<div id="title">SHADOW PAC</div>
+<div id="subtitle">STEALTH EDITION</div>
+<div id="subtitle">
+    <a href="from_scratch.html">CLICK HERE TO GO BACK TO MAIN PAGE</a>
+
+    </div>
+
+<div id="hud">
+  <div class="hud-item">SCORE <span id="scoreEl">0</span></div>
+  <div class="hud-item">LIVES <span id="livesEl">3</span></div>
+  <div class="hud-item">LEFT <span id="leftEl">0</span></div>
+</div>
+
+<div id="gameContainer">
+  <canvas id="c"></canvas>
+  <div id="overlay">
+    <h2>SHADOW PAC</h2>
+    <div class="info">
+      Navigate the dark maze.<br>
+      Your flashlight reveals only what's near.<br>
+      <span>Ghosts lurk in the shadows...</span>
+    </div>
+    <button id="startBtn">START GAME</button>
+  </div>
+</div>
+
+<div id="controls">ARROW KEYS TO MOVE &nbsp;·&nbsp; EAT POWER PELLETS TO FIGHT BACK</div>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────────────────
+const CELL   = 22;
+const COLS   = 21;
+const ROWS   = 21;
+const SPEED  = 2;
+const LIGHT_R = 100;
+
+// Map: 1=wall  0=pellet  2=open  3=power pellet
+const MAP_SRC = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,1,0,0,0,0,0,1,1,1,0,1,1,0,1],
+  [1,3,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,3,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,0,1,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,1],
+  [1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,0,0,1,0,1],
+  [1,0,1,1,1,1,0,1,1,0,0,0,1,1,0,1,1,1,1,0,1],
+  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+  [1,1,1,1,0,1,1,1,2,1,1,1,2,1,1,1,0,1,1,1,1],
+  [1,1,1,1,0,1,2,2,2,2,2,2,2,2,2,1,0,1,1,1,1],
+  [1,1,1,1,0,1,2,1,1,2,2,2,1,1,2,1,0,1,1,1,1],
+  [2,2,2,2,0,2,2,1,2,2,2,2,2,1,2,2,2,2,0,2,2],
+  [1,1,1,1,0,1,2,1,1,1,1,1,1,1,2,1,0,1,1,1,1],
+  [1,1,1,1,0,1,2,2,2,2,2,2,2,2,2,1,0,1,1,1,1],
+  [1,1,1,1,0,1,1,1,1,1,2,1,1,1,1,1,0,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,1,1,0,1],
+  [1,3,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1,0,3,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+canvas.width  = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+// ─── HUD elements ─────────────────────────────────────────────────────────────
+const scoreEl = document.getElementById('scoreEl');
+const livesEl = document.getElementById('livesEl');
+const leftEl  = document.getElementById('leftEl');
+const overlay = document.getElementById('overlay');
+
+// ─── Game state ───────────────────────────────────────────────────────────────
+let map, pac, ghosts, score, lives, gameState, animTick, frightTimer, loopId;
+const KEYS = {};
+document.addEventListener('keydown', e => {
+  KEYS[e.key] = true;
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+});
+document.addEventListener('keyup', e => { KEYS[e.key] = false; });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function isOpen(col, row) {
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) {
+    // Allow row 12 tunnel (side exits)
+    if (row === 12) return true;
+    return false;
+  }
+  return map[row][col] !== 1;
+}
+
+function centre(col, row) {
+  return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 };
+}
+
+function countPellets() {
+  let n = 0;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (map[r][c] === 0 || map[r][c] === 3) n++;
+  return n;
+}
+
+function updateHUD() {
+  scoreEl.textContent = score;
+  livesEl.textContent = lives;
+  leftEl.textContent  = countPellets();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+function initGame() {
+  map         = MAP_SRC.map(r => [...r]);
+  score       = 0;
+  lives       = 3;
+  frightTimer = 0;
+  animTick    = 0;
+  gameState   = 'playing';
+
+  spawnPac();
+
+  const gc = centre(10, 11);
+  ghosts = [
+    makeGhost(10, 11, '#ff2222', 1, 0,  false, 1.7, {col:20,row:0}),
+    makeGhost( 9, 11, '#ffaaff', 0,-1,  false, 1.5, {col:0, row:0}),
+    makeGhost(11, 11, '#00ffee', 0, 1,  true,  1.35,{col:20,row:20}),
+    makeGhost(10, 12, '#ffaa22', 0, 1,  true,  1.45,{col:0, row:20}),
+  ];
+
+  updateHUD();
+}
+
+function spawnPac() {
+  const c = centre(10, 17);
+  pac = {
+    col: 10, row: 17,
+    x: c.x,  y: c.y,
+    dx: 0, dy: 0,
+    wantDx: 0, wantDy: 0,
+    mouth: 0.25, mDir: 1,
+    dead: false, deadTimer: 0,
+  };
+}
+
+function makeGhost(col, row, color, dx, dy, hiding, speed, scatter) {
+  const c = centre(col, row);
+  return { col, row, x: c.x, y: c.y,
+           dx, dy, color, hiding, speed, scatter,
+           mode: hiding ? 'scatter' : 'chase',
+           blinkTimer: Math.random() * 300 };
+}
+
+// ─── Pac movement: smooth tile-to-tile ────────────────────────────────────────
+function movePac() {
+  if (pac.dead) return;
+
+  // Read input
+  if (KEYS['ArrowLeft'])  { pac.wantDx = -1; pac.wantDy =  0; }
+  if (KEYS['ArrowRight']) { pac.wantDx =  1; pac.wantDy =  0; }
+  if (KEYS['ArrowUp'])    { pac.wantDx =  0; pac.wantDy = -1; }
+  if (KEYS['ArrowDown'])  { pac.wantDx =  0; pac.wantDy =  1; }
+
+  // Current tile centre
+  const tx = pac.col * CELL + CELL / 2;
+  const ty = pac.row * CELL + CELL / 2;
+
+  // When we're within SPEED pixels of the tile centre, decide next step
+  if (Math.abs(pac.x - tx) <= SPEED + 0.5 && Math.abs(pac.y - ty) <= SPEED + 0.5) {
+    // Snap exactly to centre
+    pac.x = tx; pac.y = ty;
+
+    // Try turning into wanted direction
+    if ((pac.wantDx !== 0 || pac.wantDy !== 0)) {
+      const nc = pac.col + pac.wantDx;
+      const nr = pac.row + pac.wantDy;
+      if (isOpen(nc, nr)) {
+        pac.dx = pac.wantDx;
+        pac.dy = pac.wantDy;
+      }
+    }
+
+    // Try continuing current direction
+    const nc2 = pac.col + pac.dx;
+    const nr2 = pac.row + pac.dy;
+    if (pac.dx !== 0 || pac.dy !== 0) {
+      if (isOpen(nc2, nr2)) {
+        pac.col = nc2;
+        pac.row = nr2;
+        // Tunnel wrap
+        if (pac.col < 0)     pac.col = COLS - 1;
+        if (pac.col >= COLS) pac.col = 0;
+      } else {
+        pac.dx = 0; pac.dy = 0;
+      }
+    }
+  }
+
+  // Move toward target tile centre
+  pac.x += pac.dx * SPEED;
+  pac.y += pac.dy * SPEED;
+
+  // Wrap x for tunnel
+  if (pac.x < 0)            { pac.x = canvas.width - 1; }
+  if (pac.x > canvas.width) { pac.x = 1; }
+
+  // Eat pellet at current tile
+  const v = map[pac.row]?.[pac.col];
+  if (v === 0) {
+    map[pac.row][pac.col] = 2;
+    score += 10;
+    updateHUD();
+    if (countPellets() === 0) { gameState = 'win'; showOverlay('YOU WIN!', `FINAL SCORE: ${score}`, 'PLAY AGAIN'); }
+  } else if (v === 3) {
+    map[pac.row][pac.col] = 2;
+    score += 50;
+    frightTimer = 420;
+    ghosts.forEach(g => g.mode = 'frightened');
+    updateHUD();
+  }
+}
+
+// ─── Ghost movement ───────────────────────────────────────────────────────────
+function moveGhost(g) {
+  g.blinkTimer++;
+  const spd = g.mode === 'frightened' ? g.speed * 0.55 : g.speed;
+
+  const tx = g.col * CELL + CELL / 2;
+  const ty = g.row * CELL + CELL / 2;
+
+  if (Math.abs(g.x - tx) <= spd + 0.5 && Math.abs(g.y - ty) <= spd + 0.5) {
+    g.x = tx; g.y = ty;
+
+    const allDirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    let options = allDirs.filter(d =>
+      !(d.dx === -g.dx && d.dy === -g.dy) &&
+      isOpen(g.col + d.dx, g.row + d.dy)
+    );
+    if (!options.length) options = allDirs.filter(d => isOpen(g.col + d.dx, g.row + d.dy));
+    if (!options.length) return;
+
+    if (g.mode === 'frightened') {
+      const d = options[Math.floor(Math.random() * options.length)];
+      g.dx = d.dx; g.dy = d.dy;
+    } else {
+      let target;
+      if      (g.mode === 'chase')   target = { col: pac.col, row: pac.row };
+      else if (g.mode === 'ambush')  target = { col: pac.col + pac.dx * 4, row: pac.row + pac.dy * 4 };
+      else                           target = g.scatter;
+
+      options.sort((a, b) => {
+        const da = Math.hypot(g.col + a.dx - target.col, g.row + a.dy - target.row);
+        const db = Math.hypot(g.col + b.dx - target.col, g.row + b.dy - target.row);
+        return da - db;
+      });
+      g.dx = options[0].dx; g.dy = options[0].dy;
+    }
+
+    g.col += g.dx; g.row += g.dy;
+    if (g.col < 0)     g.col = COLS - 1;
+    if (g.col >= COLS) g.col = 0;
+  }
+
+  g.x += g.dx * spd;
+  g.y += g.dy * spd;
+  if (g.x < 0)            g.x = canvas.width - 1;
+  if (g.x > canvas.width) g.x = 1;
+}
+
+function moveGhosts() {
+  if (frightTimer > 0) {
+    frightTimer--;
+    if (frightTimer === 0)
+      ghosts.forEach(g => { if (g.mode === 'frightened') g.mode = g.hiding ? 'ambush' : 'chase'; });
+  }
+  ghosts.forEach(g => {
+    if (g.hiding && g.mode !== 'frightened') {
+      g.mode = Math.hypot(g.x - pac.x, g.y - pac.y) > LIGHT_R * 1.4 ? 'ambush' : 'chase';
+    }
+    moveGhost(g);
+  });
+}
+
+// ─── Collisions ───────────────────────────────────────────────────────────────
+function checkCollisions() {
+  if (pac.dead) return;
+  ghosts.forEach(g => {
+    if (Math.hypot(g.x - pac.x, g.y - pac.y) < CELL * 0.72) {
+      if (g.mode === 'frightened') {
+        score += 200;
+        updateHUD();
+        const c = centre(10, 11);
+        Object.assign(g, { x: c.x, y: c.y, col: 10, row: 11, dx: 0, dy: -1,
+                           mode: g.hiding ? 'scatter' : 'chase' });
+      } else {
+        pac.dead = true;
+        pac.deadTimer = 90;
+        lives--;
+        updateHUD();
+      }
+    }
+  });
+}
+
+// ─── Drawing ──────────────────────────────────────────────────────────────────
+function drawMaze() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const x = c * CELL, y = r * CELL, v = map[r][c];
+      if (v === 1) {
+        ctx.fillStyle = '#070730';
+        ctx.fillRect(x, y, CELL, CELL);
+        ctx.strokeStyle = '#1a2ecc';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x + 1, y + 1, CELL - 2, CELL - 2);
+      } else {
+        ctx.fillStyle = '#000008';
+        ctx.fillRect(x, y, CELL, CELL);
+        if (v === 0) {
+          ctx.beginPath();
+          ctx.arc(x + CELL/2, y + CELL/2, 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffeeaa';
+          ctx.fill();
+        } else if (v === 3) {
+          const p = 0.5 + 0.5 * Math.sin(animTick * 0.12);
+          ctx.beginPath();
+          ctx.arc(x + CELL/2, y + CELL/2, 5 + p * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,210,0,${0.85 + p * 0.15})`;
+          ctx.shadowColor = '#ffe600'; ctx.shadowBlur = 14;
+          ctx.fill(); ctx.shadowBlur = 0;
+        }
+      }
+    }
+  }
+}
+
+function drawPac() {
+  if (pac.dead) {
+    const p = 1 - pac.deadTimer / 90;
+    const a = p * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(pac.x, pac.y);
+    ctx.arc(pac.x, pac.y, CELL/2 - 1, a, Math.PI * 2 - a);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,230,0,${1 - p})`;
+    ctx.fill();
+    return;
+  }
+
+  pac.mouth += 0.06 * pac.mDir;
+  if (pac.mouth > 0.38) pac.mDir = -1;
+  if (pac.mouth < 0.03) pac.mDir =  1;
+
+  let base = 0;
+  if      (pac.dx === -1) base = Math.PI;
+  else if (pac.dy === -1) base = -Math.PI / 2;
+  else if (pac.dy ===  1) base =  Math.PI / 2;
+
+  ctx.beginPath();
+  ctx.moveTo(pac.x, pac.y);
+  ctx.arc(pac.x, pac.y, CELL/2 - 1, base + pac.mouth, base + Math.PI * 2 - pac.mouth);
+  ctx.closePath();
+  ctx.fillStyle = '#ffe600';
+  ctx.shadowColor = '#ffe60099'; ctx.shadowBlur = 20;
+  ctx.fill(); ctx.shadowBlur = 0;
+
+  const ex = pac.x + Math.cos(base - 0.55) * 5;
+  const ey = pac.y + Math.sin(base - 0.55) * 5;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#000'; ctx.fill();
+}
+
+function drawGhosts() {
+  ghosts.forEach(g => {
+    if (Math.hypot(g.x - pac.x, g.y - pac.y) > LIGHT_R + 4) return;
+    const r = CELL / 2 - 1;
+    ctx.save();
+    if (g.mode === 'frightened') {
+      const blink = frightTimer < 90 && Math.floor(frightTimer / 12) % 2 === 0;
+      ctx.fillStyle = blink ? '#fff' : '#1144ff';
+      ctx.shadowColor = blink ? '#aaf' : '#33f';
+    } else {
+      ctx.fillStyle = g.color;
+      ctx.shadowColor = g.color;
+    }
+    ctx.shadowBlur = 14;
+
+    ctx.beginPath();
+    ctx.arc(g.x, g.y - 2, r, Math.PI, 0);
+    ctx.lineTo(g.x + r, g.y + r);
+    for (let i = 0; i < 3; i++) {
+      const wx = g.x + r - (i + 0.5) * (2 * r / 3);
+      const wy = g.y + r + 3 + Math.sin(animTick * 0.12 + i) * 2;
+      ctx.quadraticCurveTo(wx, wy, g.x + r - (i + 1) * (2 * r / 3), g.y + r);
+    }
+    ctx.closePath();
+    ctx.fill(); ctx.shadowBlur = 0;
+
+    if (g.mode !== 'frightened') {
+      [{ox:-3,oy:-3},{ox:3,oy:-3}].forEach(({ox,oy}) => {
+        ctx.beginPath(); ctx.arc(g.x+ox, g.y+oy, 2.5, 0, Math.PI*2);
+        ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.beginPath(); ctx.arc(g.x+ox+g.dx, g.y+oy+g.dy, 1.5, 0, Math.PI*2);
+        ctx.fillStyle = '#00c'; ctx.fill();
+      });
+    } else {
+      ctx.fillStyle = '#ffffffbb'; ctx.font = '9px monospace';
+      ctx.textAlign = 'center'; ctx.fillText('ω', g.x, g.y + 4);
+    }
+    ctx.restore();
+  });
+}
+
+function drawGhostHints() {
+  ghosts.forEach(g => {
+    if (g.mode === 'frightened') return;
+    const dist = Math.hypot(g.x - pac.x, g.y - pac.y);
+    if (dist <= LIGHT_R || dist > LIGHT_R + 70) return;
+    const intensity = (1 - (dist - LIGHT_R) / 70) * 0.5;
+    const angle = Math.atan2(g.y - pac.y, g.x - pac.x);
+    const ex = pac.x + Math.cos(angle) * (LIGHT_R - 14);
+    const ey = pac.y + Math.sin(angle) * (LIGHT_R - 14);
+    const hg = ctx.createRadialGradient(ex, ey, 0, ex, ey, 24);
+    hg.addColorStop(0, `rgba(255,30,30,${intensity})`);
+    hg.addColorStop(1, 'transparent');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  });
+}
+
+function drawDarkness() {
+  const off = document.createElement('canvas');
+  off.width = canvas.width; off.height = canvas.height;
+  const oc = off.getContext('2d');
+
+  oc.fillStyle = 'rgba(0,0,0,0.96)';
+  oc.fillRect(0, 0, off.width, off.height);
+
+  oc.globalCompositeOperation = 'destination-out';
+  const g = oc.createRadialGradient(pac.x, pac.y, 0, pac.x, pac.y, LIGHT_R);
+  g.addColorStop(0,    'rgba(0,0,0,1)');
+  g.addColorStop(0.5,  'rgba(0,0,0,1)');
+  g.addColorStop(0.78, 'rgba(0,0,0,0.65)');
+  g.addColorStop(1,    'rgba(0,0,0,0)');
+  oc.fillStyle = g;
+  oc.fillRect(0, 0, off.width, off.height);
+
+  ctx.drawImage(off, 0, 0);
+
+  // Warm lantern glow tint
+  const tint = ctx.createRadialGradient(pac.x, pac.y, 0, pac.x, pac.y, LIGHT_R);
+  tint.addColorStop(0,   'rgba(255,220,80,0.07)');
+  tint.addColorStop(0.6, 'rgba(255,170,30,0.02)');
+  tint.addColorStop(1,   'transparent');
+  ctx.fillStyle = tint;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// ─── Game loop ────────────────────────────────────────────────────────────────
+function loop() {
+  if (gameState !== 'playing') return;
+  animTick++;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawMaze();
+  drawGhosts();
+  drawPac();
+  drawGhostHints();
+  drawDarkness();
+
+  if (!pac.dead) {
+    movePac();
+    moveGhosts();
+    checkCollisions();
+  } else {
+    pac.deadTimer--;
+    if (pac.deadTimer <= 0) {
+      if (lives <= 0) { showOverlay('GAME OVER', `FINAL SCORE: ${score}`, 'TRY AGAIN'); return; }
+      spawnPac();
+    }
+  }
+
+  loopId = requestAnimationFrame(loop);
+}
+
+// ─── Overlay helper ───────────────────────────────────────────────────────────
+function showOverlay(title, info, btn) {
+  gameState = 'paused';
+  overlay.innerHTML = `<h2>${title}</h2><div class="info">${info}</div><button id="startBtn">${btn}</button>`;
+  overlay.style.display = 'flex';
+  document.getElementById('startBtn').addEventListener('click', startGame);
+}
+
+function startGame() {
+  overlay.style.display = 'none';
+  if (loopId) cancelAnimationFrame(loopId);
+  initGame();
+  loopId = requestAnimationFrame(loop);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+body{
+    background-color:cornsilk;
+}
+.title_color {
+    color: rgb(64, 64, 64);
+    display:flex;
+    align-items: center;
+    justify-content: center;
+    font-family:initial;
+
+}
+
+.list {
+    color:rgb(64, 64, 64);
+}
+
+.client_journey {
+    color:palevioletred
+}
+div {
+    padding: 2px;
+    margin: 2px;}
+
+img{
+    max-width: 15%;
+    height: auto;
+}
+
+.photo_row{
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 15px;
+}
+
+a:hover {
+    color: palevioletred;
+}
+
+a:visited {
+    color:rgb(0, 0, 0);
+}
